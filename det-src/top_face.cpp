@@ -694,12 +694,14 @@ json detect(Runtime& r,const cv::Mat& image,const json& request) {
             rec["fusion_candidates"]=json::array();
             for(const auto& candidate:candidates){auto q=candidate.fit.corners;for(auto& p:q)p+=origin;
                 P cp=diagonalCenter(q);rec["fusion_candidates"].push_back({{"quality",candidate.fit.quality},{"center_px",{cp.x,cp.y}},
-                    {"angle_deg",candidate.angle},{"corners_px",pointsJson(q)}});}
+                    {"angle_deg",std::fmod(180.-candidate.angle,180.)},{"corners_px",pointsJson(q)}});}
         }
         if(!roi.empty()&&cv::pointPolygonTest(roi,center,false)<0){rec["status"]="outside_roi";output.push_back(rec);continue;}
         std::vector<cv::Point2f> unit={{0,0},{1,0},{1,1},{0,1}},quad;for(P p:c)quad.emplace_back(p);
         auto H=cv::getPerspectiveTransform(unit,quad);std::vector<cv::Point2f> axis={{0,.5},{1,.5}},transformed;cv::perspectiveTransform(axis,transformed,H);
         double angle=axisAngle(P(transformed[1]-transformed[0]));
+        // Internal geometry is clockwise-positive (image y points down); report the opposite.
+        angle=std::fmod(180.-angle,180.);
         rec["status"]="ok";rec["model"]=modelName;rec["center_px"]=rec["top_center_px"]={center.x,center.y};
         rec["geometric_center_px"]={geometricCenter.x,geometricCenter.y};
         rec["center_source"]="diagonal_intersection";
@@ -714,7 +716,7 @@ json detect(Runtime& r,const cv::Mat& image,const json& request) {
     return {{"ret-code",0},{"ret-msg","ok"},{"best_img_idx",count?0:-1},{"image_size_wh",{image.cols,image.rows}},{"stage_ms",r.profile},{"geometry_ms",r.geometry},{"feature_backend",featureBackend},
             {"background_image",r.backgroundPath.string()},{"background_generation",r.backgroundGeneration},{"background_updated",backgroundUpdated},{"alignment_mode",r.alignBackground?"orb":"fixed"},
             {"coordinate_frame","current_input_image_pixels"},{"center_definition","intersection_of_top_face_diagonals"},
-            {"angle_definition","projected_long_axis_clockwise_from_image_positive_x_mod_180"},
+            {"angle_definition","projected_long_axis_counterclockwise_from_image_positive_x_mod_180"},
             {"foreground_object_count",output.size()},{"top_face_count",count},{"objects",output},{"pts_top_face",pts},{"elapsed_ms",ms}};
 }
 

@@ -8210,7 +8210,7 @@ static void draw_top_face_debug(Mat& image, const json& det_json)
             {
                 double ang = obj["angle_deg"].get<double>() * CV_PI / 180.0;
                 cv::Point e(cvRound(c.x + 40 * std::cos(ang)),
-                    cvRound(c.y + 40 * std::sin(ang)));
+                    cvRound(c.y - 40 * std::sin(ang)));
                 cv::line(image, c, e, Scalar(255, 0, 0), 2);
             }
         }
@@ -8333,7 +8333,8 @@ int det_to_pts_top_face(Mat& image, const json& det_json, json& j)
         float length_mm = 0;
         if (h.length_px > 0)
         {
-            const double rad = h.angle * CV_PI / 180.0;
+            // angle_deg is counter-clockwise-positive; negate so the projected endpoints are unchanged.
+            const double rad = -h.angle * CV_PI / 180.0;
             const double hx = 0.5 * h.length_px * std::cos(rad);
             const double hy = 0.5 * h.length_px * std::sin(rad);
             float x1 = 0, y1 = 0, x2 = 0, y2 = 0;
