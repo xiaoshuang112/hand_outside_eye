@@ -1,4 +1,6 @@
 #include "top_face.hpp"
+#include <opencv2/imgcodecs.hpp>
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -34,9 +36,30 @@ int main(int argc, char** argv) {
                     throw std::runtime_error("Snapshot mapping mismatch or height applied twice");
             }
         }
+        const auto image = cv::imread((fs::absolute(argv[1]) / "tests/data/00218.jpg").string());
+        json detected;
+        if (image.empty() || top_face_detect(image, json::object(), detected) != 0 ||
+            detected.value("top_face_count", 0) == 0)
+            throw std::runtime_error("Angle reference image did not produce a top face");
+        if (detected.value("angle_definition", std::string()) !=
+            "projected_long_axis_counterclockwise_from_image_positive_x_mod_180")
+            throw std::runtime_error("Angle direction metadata mismatch");
+        for (const auto& object : detected.at("objects")) {
+            if (object.at("status") != "ok") continue;
+            const auto& corners = object.at("corners_px");
+            auto point = [&](int i) {
+                return cv::Point2d(corners[i][0].get<double>(), corners[i][1].get<double>());
+            };
+            const auto axis = (point(1) - point(0)) + (point(2) - point(3));
+            const double expected = std::fmod(std::atan2(-axis.y, axis.x) * 180 / CV_PI + 180, 180);
+            double error = std::abs(object.at("angle_deg").get<double>() - expected);
+            error = std::min(error, 180 - error);
+            if (error > 1)
+                throw std::runtime_error("Reported angle disagrees with counter-clockwise image axis");
+        }
         top_face_close();
         fs::remove_all(app);
-        std::cout << "Production three-point mapping and height independence passed\n";
+        std::cout << "Production mapping, height independence and counter-clockwise angles passed\n";
         return 0;
     } catch (const std::exception& e) {
         top_face_close();

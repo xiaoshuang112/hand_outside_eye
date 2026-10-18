@@ -2,7 +2,9 @@
 
 The grasp center (`center_px`, `top_center_px`, `pts_top_face`) is always the intersection of the refined quadrilateral diagonals. `center_source` is `diagonal_intersection`. Image angle, legacy Z/length conversion, sorting and top-capture correspondence are unchanged.
 
-The optional center NN is diagnostic only. Successful inference adds `center_model_center_px`, `center_model_offset_px` (NN center minus geometric center), mass, backend and inference time. Loading/inference failure records `center_model_status`/`center_model_error` and never replaces or rejects valid geometric detection. The legacy `center_model_required` setting cannot make these diagnostics mandatory.
+The optional center NN contributes proposals and scores to geometric candidate selection. It never directly replaces the selected quadrilateral's diagonal center. Successful inference adds `center_model_center_px`, `center_model_offset_px` (NN center minus geometric center), mass, backend and inference time. Loading/inference failure records `center_model_status`/`center_model_error` and falls back to geometry-only selection.
+
+Public image angles are now counter-clockwise positive from image +X, modulo 180 degrees. Internal search angles remain clockwise positive. The output-boundary sign change from source commit `563e25a` does not change pixel centers or XY mapping. Consumers migrating from the old clockwise convention must negate their saved image zero angle and reverse the delta add/subtract direction together; see `HANDOFF_WSL.md`.
 
 `config/top_face/tcp_xy_mapping.json` retains `enabled` and `image_size_wh: [1280,1024]`:
 

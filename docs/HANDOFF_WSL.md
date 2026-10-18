@@ -1,6 +1,6 @@
 # WSL 算法库开发交接
 
-交接日期：2026-10-18。适用仓库：[xiaoshuang112/hand_outside_eye](https://github.com/xiaoshuang112/hand_outside_eye)，分支 `main`。算法导入基线为 `1cc6675`；原正式工程来自 `feilun` 分支提交 `b25b48bc32751e1e736833925fad3c5b2db4720e`，来源记录见 [PROVENANCE.json](../PROVENANCE.json)。
+交接日期：2026-10-18。适用仓库：[xiaoshuang112/hand_outside_eye](https://github.com/xiaoshuang112/hand_outside_eye)，分支 `main`。初始算法导入基线为 `1cc6675`，来源是原正式工程 `feilun` 分支的 `b25b48b`；现已合入 90 的角度改动 `563e25a`。来源记录见 [PROVENANCE.json](../PROVENANCE.json)。当前版本以 `git rev-parse HEAD` 为准，不把导入基线号当成最新版本。
 
 后续在 WSL 中修改图像算法、拟合脚本和测试，再交叉编译给 RDK X3 使用。WSL 可以完成 CPU 离线回归，但不能据此确认 X3 BPU、MVS 相机、宿主应用和机械臂的实际运行效果。
 
@@ -25,7 +25,22 @@
 | 固定下抓 Z | `tcp_z = 225.39` mm | 宿主应用 |
 | 高度输入 | 最后读到 `35` mm | 当前固定顶部模型不使用它计算 XY |
 
-应用参数的无凭据示例在 [config/app_mapping.example.json](../config/app_mapping.example.json)。**算法库不会加载这个示例文件**，也不负责向机器人寄存器写值。
+上表是同步前最后确认的应用参数，采用旧顺时针角度约定。当前 [config/app_mapping.example.json](../config/app_mapping.example.json) 已改为适配逆时针输出的迁移示例，详见第 7 节；它不是现场参数的实时副本。**算法库不会加载这个示例文件**，也不负责向机器人寄存器写值。
+
+### 版本同步约定
+
+GitHub `main` 是统一开发基线，90 正式工程 `feilun` 与它指向同一提交，分支名可以不同。90 原分支历史保存在 `backup/feilun-before-github-sync-*`，原 `main` 不修改。GitHub 远程在 90 命名为 `hand-outside-eye`，避免与旧项目的其他远程混淆。
+
+WSL 修改先提交到 GitHub `main`；90 无本地修改时，通过以下命令同步：
+
+```bash
+git fetch hand-outside-eye main
+git switch feilun
+git merge --ff-only hand-outside-eye/main
+git rev-parse HEAD
+```
+
+若临时在 90 的 `feilun` 提交，应显式 `git push hand-outside-eye HEAD:main`，然后 WSL `git pull --ff-only`。两边出现分叉或未提交修改时先检查差异，不用强推或硬重置掩盖问题。对外报版本同时说明仓库、分支、提交号；库二进制另记 SHA256，不能仅凭源码 HEAD 判断已部署版本。
 
 ## 2 WSL 中先跑通什么
 
@@ -52,7 +67,7 @@ bash tests/run_cpu_checks.sh
 
 ```text
 diagonal center, optional fusion prior, legacy mapping and ray plane checks passed
-Production three-point mapping and height independence passed
+Production mapping, height independence and counter-clockwise angles passed
 ```
 
 不要将根目录 `cmake` 默认配置当成普通 CPU 构建入口：默认 `USE_RDK=ON` 需要 Horizon SDK，改成 `OFF` 又会进入 CUDA/TensorRT 路径。纯图像与映射开发先使用上述 CPU 检查。
@@ -104,7 +119,7 @@ AI_det_init / AI_det
 
 NN 会影响候选生成与选择，但不会直接把自己的中心点写成最终抓取中心。`center_px`、`top_center_px`、`geometric_center_px` 对应选中四边形的对角线交点，`center_source` 为 `diagonal_intersection`。不要把 `center_model_center_px` 当成最终点。
 
-历史说明 [TOP_FACE_TCP_MAPPING.md](TOP_FACE_TCP_MAPPING.md) 中“NN 仅诊断、不影响几何”的描述早于当前融合实现。以 `selectCandidate`、`coarseCenterPrior` 和本交接所述行为为准。
+融合行为以 `selectCandidate`、`coarseCenterPrior` 和 [TOP_FACE_TCP_MAPPING.md](TOP_FACE_TCP_MAPPING.md) 为准。旧聊天中“NN 仅诊断、不影响候选选择”的描述已经过时。
 
 ## 4 输入输出约定
 
@@ -128,7 +143,7 @@ NN 会影响候选生成与选择，但不会直接把自己的中心点写成�
 | `objects[*].status` | 只将 `ok` 视为有效检测 |
 | `objects[*].corners_px` | 顶部四边形四角 |
 | `objects[*].center_px` | 最终顶部像素中心 |
-| `objects[*].angle_deg` | 图像长轴角，按 180° 对称表示 |
+| `objects[*].angle_deg` | 从图像 +X 起逆时针为正的长轴角，按 180° 对称表示 |
 | `center_model_*`、`fusion_*` | 模型预测和融合诊断信息 |
 | `pts_top_face` | 转换后按抓取顺序排列的 `[u,v,angle]` |
 | `list_pts_base` | `[映射X, 映射Y, 旧Z, 旧长度]` |
@@ -204,12 +219,22 @@ Z_top = 0.0024996875390576176 * X + 251.07249093863268  (mm)
 | 3 | 请求对应的工件高度 |
 | 4 | 应用计算的绝对欧拉 RZ，角度制 |
 
-当前应用按下式计算寄存器 4：
+旧应用配置 `plusDiff=0` 时，按下式计算寄存器 4：
 
 ```text
 delta = wrap180(image_angle - zeroAngle)
 RZ = wrap360(zeroEuler - delta)     # plusDiff=0
 ```
+
+当前算法已将图像角从顺时针为正改为逆时针为正，内部几何搜索与最终像素中心不变。为了在仅改变角度约定时保留原有机器人输出，应同时做以下迁移，而不是单独改零位角：
+
+```text
+zeroAngle_new = -zeroAngle_old
+plusDiff_new = 1 - plusDiff_old
+zeroEuler_new = zeroEuler_old
+```
+
+因此本例从 `zeroAngle=-88.74, plusDiff=0` 迁移为 `zeroAngle=88.74, plusDiff=1`，`zeroEuler=135` 不变。此关系适用于原来同一条零位差角公式，并沿用长方形的 180° 对称约定；恰好 ±90° 的边界需单独验收。本次源码同步只更新仓库示例，没有自动修改现场应用参数或部署二进制。正式换库前，要核对当前机器人脚本和应用版本后一起验证。
 
 算法输出的图像角、绝对欧拉 RZ、轴角不是同一种量。算法没有估计完整 RX、RY、RZ；也没有用新 H 对工件方向做 Base 变换。以后修改方向时，优先把长轴两点通过相同的几何映射转换到 Base，再处理工具固定偏角。
 
