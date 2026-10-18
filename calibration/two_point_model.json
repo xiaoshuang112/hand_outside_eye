@@ -1,0 +1,142 @@
+{
+  "schema_version": 1,
+  "model_type": "homography",
+  "enabled": true,
+  "status": "candidate_two_anchors_no_independent_validation",
+  "units": "mm",
+  "image_size_wh": [
+    1280,
+    1024
+  ],
+  "matrix": [
+    [
+      0.7844244030820511,
+      0.042494817364148466,
+      -546.9885911819293
+    ],
+    [
+      0.023507519323893188,
+      -0.816780337852827,
+      1518.2304660353932
+    ],
+    [
+      -1.5569133612246964e-05,
+      -2.9873529535553058e-05,
+      1.0
+    ]
+  ],
+  "top_plane_base_z_equals_a_x_plus_b": {
+    "a": 0.0024996875390576176,
+    "b": 251.07249093863268,
+    "y_slope": 0.0
+  },
+  "image_camera_matrix": [
+    [
+      697.5631103515625,
+      0.0,
+      615.7079467773438
+    ],
+    [
+      0.0,
+      698.2827758789062,
+      530.385498046875
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "camera_to_base_rotation": [
+    [
+      0.998524283165311,
+      0.05226657833602199,
+      0.014746549367430029
+    ],
+    [
+      0.05256708143809427,
+      -0.9984010754922378,
+      -0.020784475096180897
+    ],
+    [
+      0.013636637352453882,
+      0.021528986157909866,
+      -0.9996752196972426
+    ]
+  ],
+  "effective_camera_center_base_mm": [
+    -50.839358840609805,
+    1139.8613389271309,
+    812.509927360564
+  ],
+  "fitted_base_yaw_correction_deg": -0.9416133460246136,
+  "source_image": "00214.jpg",
+  "training_samples": [
+    {
+      "label": "left",
+      "uv_px": [
+        134.15645897574697,
+        458.22967424345796
+      ],
+      "measured_top_base_xyz_mm": [
+        -429.05,
+        1165.5,
+        250.0
+      ],
+      "fitted_top_base_xyz_mm": [
+        -429.0499999999999,
+        1165.5,
+        250.0
+      ],
+      "fitting_error_xyz_mm": [
+        1.1368683772161603e-13,
+        0.0,
+        0.0
+      ],
+      "old_mapping_at_measured_top_z_xyz_mm": [
+        -412.0992486724947,
+        1151.5090778278613,
+        250.0
+      ],
+      "old_mapping_xy_error_mm": 21.978941598579404
+    },
+    {
+      "label": "right",
+      "uv_px": [
+        1126.0708119698581,
+        526.6192374370778
+      ],
+      "measured_top_base_xyz_mm": [
+        371.05,
+        1152.92,
+        252.0
+      ],
+      "fitted_top_base_xyz_mm": [
+        371.05000000000007,
+        1152.9200000000003,
+        252.0
+      ],
+      "fitting_error_xyz_mm": [
+        5.684341886080802e-14,
+        2.2737367544323206e-13,
+        0.0
+      ],
+      "old_mapping_at_measured_top_z_xyz_mm": [
+        333.9806558576694,
+        1152.0359276795702,
+        252.0
+      ],
+      "old_mapping_xy_error_mm": 37.079884830057026
+    }
+  ],
+  "pixel_contract": "Full-frame alpha=1 undistorted image; same intrinsics as current production detection; no extra flips.",
+  "height_contract": "Already maps to the measured top plane. Do not add workpiece height again.",
+  "output_contract": "Existing homography loader returns XY only; top Z is a*X+b. App fixed grasp Z is a separate setting.",
+  "fit_contract": "Hand-eye tilt retained; effective camera Cx,Cy,Cz and Base yaw fitted from two anchors.",
+  "limitations": [
+    "Training errors are zero by construction, not independent accuracy.",
+    "No measured constraint on tilt along Base Y; assumed zero by user.",
+    "Other image regions and changed workpiece thickness require validation.",
+    "Geometric yaw correction affects XY mapping only; robot RZ configuration is unchanged."
+  ]
+}

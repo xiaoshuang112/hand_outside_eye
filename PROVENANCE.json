@@ -1,0 +1,15 @@
+{
+  "source_project": "det-xialiao-MVS-feilun-nano",
+  "source_branch": "feilun",
+  "source_commit": "b25b48bc32751e1e736833925fad3c5b2db4720e",
+  "snapshot_date": "2026-10-18",
+  "mapping_sha256": "9819a815819ba8d276493559523b7a25ac141d74e473969a9643d862dec656cc",
+  "runtime_config": "top_face algorithm.json, background.bmp, background_features.bin, tcp_xy_mapping.json and eye_to_hand_result.yaml copied from the production device; remaining model assets from the formal algorithm source",
+  "excluded": "Qt application, robot runtime credentials, SDK installers, sysroot, build outputs, logs",
+  "source_adjustments": "Bundled required spdlog headers with upstream LICENSE; portable X3 sysroot cache setting; CPU checks and calibration reproduction added. Detection and mapping C++ logic unchanged. Corrected the invalid camera-at-table test to use the fixture table Z instead of a stale literal 194 mm.",
+  "validation": {
+    "cpu_checks": "fusion, offline configuration, center/mapping regression, production snapshot height-independence checks passed",
+    "python_fit": "Reproduced matrix agrees with deployed configuration",
+    "new_full_x3_build": "Not rerun for this repository import; production source was previously cross-compiled"
+  }
+}

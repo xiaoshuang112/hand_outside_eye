@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "model_type": "homography",
+  "enabled": true,
+  "status": "candidate_three_anchors_no_independent_validation",
+  "units": "mm",
+  "image_size_wh": [
+    1280,
+    1024
+  ],
+  "matrix": [
+    [
+      0.7860579776935975,
+      0.04216303694225008,
+      -546.0937111509068
+    ],
+    [
+      0.02325393143960341,
+      -0.8183921731921424,
+      1517.617503346972
+    ],
+    [
+      -1.5569036280136996e-05,
+      -2.9875128300082602e-05,
+      1.0
+    ]
+  ],
+  "top_plane_base_z_equals_a_x_plus_b": {
+    "a": 0.0024996875390576176,
+    "b": 251.07249093863268,
+    "y_slope": 0.0
+  },
+  "image_camera_matrix": [
+    [
+      697.5631103515625,
+      0.0,
+      615.7079467773438
+    ],
+    [
+      0.0,
+      698.2827758789062,
+      530.385498046875
+    ],
+    [
+      0.0,
+      0.0,
+      1.0
+    ]
+  ],
+  "camera_to_base_rotation": [
+    [
+      0.9985486495202303,
+      0.05180172951817019,
+      0.01473687077539456
+    ],
+    [
+      0.05210217522370831,
+      -0.9984253019499951,
+      -0.020791338653851434
+    ],
+    [
+      0.013636637352453882,
+      0.021528986157909866,
+      -0.9996752196972426
+    ]
+  ],
+  "effective_camera_center_base_mm": [
+    -49.08158692895072,
+    1138.2242139024406,
+    813.6912925867603
+  ],
+  "fitted_base_yaw_correction_deg": -0.9682895510210099,
+  "training_samples": [
+    {
+      "label": "left",
+      "source_image": "00214.jpg",
+      "uv_px": [
+        134.15645897574697,
+        458.22967424345796
+      ],
+      "measured_base_xy_mm": [
+        -429.05,
+        1165.5
+      ],
+      "top_z_mm": 250.0,
+      "z_source": "measured",
+      "fitted_top_base_xyz_mm": [
+        -428.07288852468554,
+        1164.0930655911018,
+        250.00244247337912
+      ],
+      "error_xy_mm": [
+        0.977111475314473,
+        -1.4069344088982234
+      ],
+      "error_norm_mm": 1.7129539591398886,
+      "prior_model_error_norm_mm": 1.1368683772161603e-13
+    },
+    {
+      "label": "right",
+      "source_image": "00214.jpg",
+      "uv_px": [
+        1126.0708119698581,
+        526.6192374370778
+      ],
+      "measured_base_xy_mm": [
+        371.05,
+        1152.92
+      ],
+      "top_z_mm": 252.0,
+      "z_source": "measured",
+      "fitted_top_base_xyz_mm": [
+        373.69803652152325,
+        1151.1134044488495,
+        252.0066192638959
+      ],
+      "error_xy_mm": [
+        2.648036521523238,
+        -1.8065955511506218
+      ],
+      "error_norm_mm": 3.205602112670584,
+      "prior_model_error_norm_mm": 2.3437142008433856e-13
+    },
+    {
+      "label": "lower",
+      "source_image": "00218.jpg",
+      "uv_px": [
+        783.1689736237097,
+        586.0108971170205
+      ],
+      "measured_base_xy_mm": [
+        100.74,
+        1085.36
+      ],
+      "top_z_mm": 251.32430946131734,
+      "z_source": "inferred from the user-constrained plane; not measured",
+      "fitted_top_base_xyz_mm": [
+        97.11485135510614,
+        1088.5735299394735,
+        251.31524772242244
+      ],
+      "error_xy_mm": [
+        -3.625148644893855,
+        3.213529939473574
+      ],
+      "error_norm_mm": 4.844427455279807,
+      "prior_model_error_norm_mm": 7.571291994857533
+    }
+  ],
+  "pixel_contract": "Full-frame alpha=1 undistorted image; same intrinsics as current production detection; no extra flips.",
+  "height_contract": "Already maps to the measured top plane. Do not add workpiece height again.",
+  "output_contract": "Existing homography loader returns XY only; top Z is a*X+b. App fixed grasp Z is a separate setting.",
+  "fit_contract": "Equal-weight least squares over 3 XY anchors for Cx,Cy,Cz and Base yaw; hand-eye tilt retained.",
+  "limitations": [
+    "All three observations are training anchors; no independent validation.",
+    "Third Z inferred from Z=a*BaseX+b, not a measured additional height.",
+    "Y slope fixed to zero as requested; other workpiece thickness requires recalibration.",
+    "Geometry yaw affects XY only; robot RZ and fixed grasp Z are unchanged."
+  ],
+  "source_images": [
+    "00214.jpg",
+    "00218.jpg"
+  ]
+}

@@ -1,0 +1,116 @@
+{
+  "selected_target": "lower",
+  "selected_image": "00218.jpg",
+  "current_model_candidates": [
+    {
+      "position": "upper",
+      "uv_px": [
+        762.1677102567216,
+        279.9766054109965
+      ],
+      "current_model_xy_mm": [
+        64.06802234166858,
+        1334.4642032997249
+      ],
+      "distance_to_supplied_xy_mm": 251.7890745186611
+    },
+    {
+      "position": "lower",
+      "uv_px": [
+        783.1689736237097,
+        586.0108971170205
+      ],
+      "current_model_xy_mm": [
+        95.07434784598216,
+        1090.3824344835016
+      ],
+      "distance_to_supplied_xy_mm": 7.571291994857533
+    }
+  ],
+  "plane": {
+    "a": 0.0024996875390576176,
+    "b": 251.07249093863268,
+    "y_slope": 0.0
+  },
+  "samples": [
+    {
+      "label": "left",
+      "source_image": "00214.jpg",
+      "uv_px": [
+        134.15645897574697,
+        458.22967424345796
+      ],
+      "measured_base_xy_mm": [
+        -429.05,
+        1165.5
+      ],
+      "top_z_mm": 250.0,
+      "z_source": "measured",
+      "fitted_top_base_xyz_mm": [
+        -428.07288852468554,
+        1164.0930655911018,
+        250.00244247337912
+      ],
+      "error_xy_mm": [
+        0.977111475314473,
+        -1.4069344088982234
+      ],
+      "error_norm_mm": 1.7129539591398886,
+      "prior_model_error_norm_mm": 1.1368683772161603e-13
+    },
+    {
+      "label": "right",
+      "source_image": "00214.jpg",
+      "uv_px": [
+        1126.0708119698581,
+        526.6192374370778
+      ],
+      "measured_base_xy_mm": [
+        371.05,
+        1152.92
+      ],
+      "top_z_mm": 252.0,
+      "z_source": "measured",
+      "fitted_top_base_xyz_mm": [
+        373.69803652152325,
+        1151.1134044488495,
+        252.0066192638959
+      ],
+      "error_xy_mm": [
+        2.648036521523238,
+        -1.8065955511506218
+      ],
+      "error_norm_mm": 3.205602112670584,
+      "prior_model_error_norm_mm": 2.3437142008433856e-13
+    },
+    {
+      "label": "lower",
+      "source_image": "00218.jpg",
+      "uv_px": [
+        783.1689736237097,
+        586.0108971170205
+      ],
+      "measured_base_xy_mm": [
+        100.74,
+        1085.36
+      ],
+      "top_z_mm": 251.32430946131734,
+      "z_source": "inferred from the user-constrained plane; not measured",
+      "fitted_top_base_xyz_mm": [
+        97.11485135510614,
+        1088.5735299394735,
+        251.31524772242244
+      ],
+      "error_xy_mm": [
+        -3.625148644893855,
+        3.213529939473574
+      ],
+      "error_norm_mm": 4.844427455279807,
+      "prior_model_error_norm_mm": 7.571291994857533
+    }
+  ],
+  "training_rmse_mm": 3.496597085756375,
+  "training_max_mm": 4.844427455279807,
+  "previous_model_rmse_on_three_points_mm": 4.371287471344255,
+  "self_checks": "Projection equivalence, finite image domain, fit rank and least-squares improvement passed"
+}

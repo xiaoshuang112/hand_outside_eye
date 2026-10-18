@@ -1,0 +1,7 @@
+LIBRARY
+
+EXPORTS
+
+AI_det_init
+AI_det
+AI_det_close

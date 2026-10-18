@@ -1,0 +1,24 @@
+{
+  "background_image": "background.bmp",
+  "background_auto_reload": true,
+  "alignment_mode": "fixed",
+  "fast": true,
+  "npu_model": "background_features.bin",
+  "opencv_threads": 2,
+  "search_iterations": 90,
+  "difference_threshold": 15.0,
+  "residual_threshold": 10.0,
+  "correlation_threshold": 0.6,
+  "models": [
+    {
+      "name": "rect_91x60",
+      "length_px": 114.0,
+      "width_px": 64.0
+    }
+  ],
+  "use_center_model": true,
+  "center_model": "center_only.bin",
+  "center_model_required": false,
+  "center_model_image_size": 256,
+  "center_model_decode_radius": 4
+}

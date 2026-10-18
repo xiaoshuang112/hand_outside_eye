@@ -1,0 +1,15 @@
+{
+  "background_image": "background.bmp",
+  "background_auto_reload": true,
+  "alignment_mode": "fixed",
+  "fast": true,
+  "npu_model": "background_features.bin",
+  "opencv_threads": 2,
+  "search_iterations": 90,
+  "difference_threshold": 15.0,
+  "residual_threshold": 10.0,
+  "correlation_threshold": 0.6,
+  "models": [
+    {"name": "narrow_rectangle", "length_px": 178.0, "width_px": 44.0}
+  ]
+}
