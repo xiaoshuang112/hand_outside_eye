@@ -2,6 +2,8 @@
 
 完整 C++ 视觉检测算法库，来源于正式工程 `det-xialiao-MVS-feilun-nano` 的 `feilun` 分支。包含顶部四边形定位、几何与中心模型融合、对角线交点、像素到 Base XY 映射、MVS 相机接口，以及 RDK X3 / TensorRT 后端源码。来源提交和模型校验值见 [PROVENANCE.json](PROVENANCE.json)。
 
+后续开发先读 [WSL 算法库开发交接](docs/HANDOFF_WSL.md)，其中记录环境搭建、代码入口、坐标与寄存器约定、已知问题和 X3 发布流程。
+
 ## 当前检测流程
 
 1. 图像采集、曝光融合和去畸变。
