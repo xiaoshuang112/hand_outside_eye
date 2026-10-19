@@ -20,6 +20,8 @@ int main(int argc, char** argv) {
         json algorithm, mapping;
         std::ifstream(source / "algorithm.json") >> algorithm;
         std::ifstream(source / "tcp_xy_mapping.json") >> mapping;
+        algorithm["workpiece_shape"] = "rectangle"; // Historical rectangle angle reference.
+        algorithm["models"] = {{{"name", "rect_91x60"}, {"length_px", 114.0}, {"width_px", 64.0}}};
         algorithm["use_center_model"] = false;
         algorithm["background_image"] = (source / "background.bmp").string();
         std::ofstream(dir / "algorithm.json") << algorithm;

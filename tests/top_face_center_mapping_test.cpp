@@ -27,6 +27,8 @@ int main(int argc,char** argv){try{
     fs::path app=fs::temp_directory_path()/("top-face-center-mapping-"+std::to_string(getpid())),dir=app/"config"/"top_face";
     fs::create_directories(dir);
     json algorithm;std::ifstream(source/"algorithm.json")>>algorithm;
+    algorithm["workpiece_shape"]="rectangle"; // Legacy NN checks do not select the cylinder runtime.
+    algorithm["models"]={{{"name","rect_91x60"},{"length_px",114.0},{"width_px",64.0}}};
     algorithm["background_image"]=fs::absolute(source/"background.bmp").string();algorithm["use_center_model"]=false;
     save(dir/"algorithm.json",algorithm);
     auto load=[&](const json& mapping){top_face_close();save(dir/"tcp_xy_mapping.json",mapping);return top_face_init(app.string());};

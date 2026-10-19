@@ -1,24 +1,21 @@
 {
-  "background_image": "background.bmp",
+  "workpiece_shape": "circle",
+  "background_image": "cylinder_background.png",
   "background_auto_reload": true,
   "alignment_mode": "fixed",
   "fast": true,
-  "npu_model": "background_features.bin",
   "opencv_threads": 2,
   "search_iterations": 90,
   "difference_threshold": 15.0,
   "residual_threshold": 10.0,
   "correlation_threshold": 0.6,
-  "models": [
-    {
-      "name": "rect_91x60",
-      "length_px": 114.0,
-      "width_px": 64.0
-    }
-  ],
-  "use_center_model": true,
-  "center_model": "center_only.bin",
-  "center_model_required": false,
-  "center_model_image_size": 256,
-  "center_model_decode_radius": 4
+  "circle_min_radius_px": 18.0,
+  "circle_max_radius_px": 38.0,
+  "circle_difference_threshold": 30.0,
+  "circle_min_intensity": 105.0,
+  "circle_fit_tolerance_px": 1.3,
+  "circle_min_coverage": 0.75,
+  "circle_min_fill_ratio": 0.75,
+  "circle_angle_deg": 0.0,
+  "use_center_model": false
 }

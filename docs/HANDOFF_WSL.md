@@ -4,6 +4,20 @@
 
 后续在 WSL 中修改图像算法、拟合脚本和测试，再交叉编译给 RDK X3 使用。WSL 可以完成 CPU 离线回归，但不能据此确认 X3 BPU、MVS 相机、宿主应用和机械臂的实际运行效果。
 
+## 2026-10-19：当前目标改为圆柱工件
+
+当前 `config/top_face/algorithm.json` 默认 `workpiece_shape="circle"`，检测圆柱的圆形顶面。背景为用户指定的 `capture_20261019_163657_840_94154fa5_fused_undistorted.png`，原样复制到 `config/top_face/cylinder_background.png`；配套坐标记录也已保留。只使用本批带 `undistorted` 的图片，它们已是生产 `alpha=1` 坐标，内部不再去畸变、缩放或翻转。
+
+圆形分支采用正向背景差分、实心顶面检查、稳健圆周拟合和局部亚像素边缘细化。它不会加载矩形中心模型或 BPU 背景特征模型。旧矩形代码仅供明确指定 `workpiece_shape="rectangle"` 的历史回归；当前配置不走这条路径。
+
+对外 C ABI、`xialiao_type="top_face"`、请求参数、排序、`top_capture` 和坐标换算保持原有接口。输出 `center_px`、`top_center_px`、`geometric_center_px` 均为拟合的顶部圆心，`center_source="circle_fit"`；`apparent_length_px`、`apparent_width_px` 现在表示直径，对应旧长度输出槽也表示圆柱直径。`corners_px` 保留四点格式，含义是圆的包围框，不是矩形工件的物理四角。新增 `shape="circle"`、`radius_px`、`diameter_px`、圆周覆盖率及拟合残差等诊断字段。
+
+用户已确认算法 `angle_deg` 固定 **0°**（配置 `circle_angle_deg=0`），并以 `angle_defined=false` 标记无唯一方向。这是算法字段，不代表机器人最终欧拉 RZ 为零；宿主应用仍按自己的模式和零位参数处理，算法未改动现场参数或机器人脚本。
+
+运行 `bash tests/run_cylinder_checks.sh` 可执行合成圆心精度、侧壁干扰、污迹/矩形/圆环拒绝、ROI、异常输入和本批七张图片检查，并将圆周叠加图与 JSON 保存到 `calibration/output/cylinder_detection/results/`。无本批数据时只运行合成检查。`tests/run_cpu_checks.sh` 也包含合成圆形检查和原坐标映射回归。
+
+以下各节中的矩形顶部、四边形中心、长轴角、旧模型及生产参数表是此前交接记录；当前圆柱检测行为以本节和当前配置为准。现有坐标模型的几何适用高度仍须随实际圆柱顶面核对。
+
 ## 1 当前交付状态
 
 完整算法源码、中心模型、背景快照、当前坐标模型、手眼文件、拟合脚本和离线检查已进入仓库。Qt 应用、机器人 SDK、MVS 安装包、Horizon sysroot、运行凭据和编译产物不在仓库中。
@@ -63,7 +77,7 @@ pkg-config --modversion opencv4
 bash tests/run_cpu_checks.sh
 ```
 
-这个脚本直接编译四组 CPU 检查，不连接相机、机械臂或 BPU。正常结束时包含以下输出；中间出现针对非法输入的 `top_face_init` 报错是负面测试的预期行为，要以进程退出码为准。
+这个脚本直接编译圆柱合成检查及四组历史 CPU 回归，不连接相机、机械臂或 BPU。正常结束时包含以下输出；中间出现针对非法输入的 `top_face_init` 报错是负面测试的预期行为，要以进程退出码为准。
 
 ```text
 diagonal center, optional fusion prior, legacy mapping and ray plane checks passed

@@ -1,4 +1,5 @@
-// Loads the real ai-det library/BPU. Never calls AI_det_init, AI_det, or camera/robot functions.
+// Loads the real ai-det library. Circle mode needs no BPU model. Never calls
+// AI_det_init, AI_det, or camera/robot functions.
 #include "top_face.hpp"
 #include "my_base.h"
 #include <opencv2/opencv.hpp>
@@ -56,7 +57,9 @@ int main(int argc,char** argv){try{
         int rc=top_face_detect(image,json::object(),detected);
         json output={{"image",argv[i]},{"detection",detected}};
         if(rc){std::cout<<output.dump()<<'\n';return 1;}
-        if(detected.value("feature_backend",std::string())!="horizon_x3_bpu")throw std::runtime_error("library is not the X3 BPU build");
+        const auto backend=detected.value("feature_backend",std::string());
+        if(backend!="horizon_x3_bpu"&&backend!="cpu_circle_geometry")
+            throw std::runtime_error("unexpected detector backend");
         if(!k.empty()){
             json converted;
             if(det_to_pts_top_face(image,detected,converted))throw std::runtime_error(converted.value("ret-msg",std::string("conversion failed")));

@@ -5,6 +5,8 @@ check_build="$(mktemp -d)"
 trap 'rm -rf "$check_build"' EXIT
 read -r -a opencv_flags <<< "$(pkg-config --cflags --libs opencv4)"
 common=(-std=c++17 -O1 -Iinclude -Idet-src)
+g++ "${common[@]}" tests/cylinder_top_face_test.cpp det-src/top_face.cpp det-src/center_heatmap_infer.cpp "${opencv_flags[@]}" -o "$check_build/cylinder"
+"$check_build/cylinder" "$PWD"
 g++ "${common[@]}" tests/top_face_fusion_test.cpp det-src/center_heatmap_infer.cpp "${opencv_flags[@]}" -o "$check_build/fusion"
 "$check_build/fusion"
 g++ "${common[@]}" tests/top_face_offline_test.cpp det-src/top_face.cpp det-src/center_heatmap_infer.cpp "${opencv_flags[@]}" -o "$check_build/offline"

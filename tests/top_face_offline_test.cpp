@@ -20,6 +20,8 @@ int main(int argc,char** argv){
     fs::create_directories(dir);
     json algorithm,mapping;
     std::ifstream(source/"algorithm.json")>>algorithm;
+    algorithm["workpiece_shape"]="rectangle"; // Explicit historical detector fixture.
+    algorithm["models"]={{{"name","rect_91x60"},{"length_px",114.0},{"width_px",64.0}}};
     // Keep the legacy affine compatibility check independent of the deployed calibration.
     mapping={{"enabled",true},{"image_size_wh",{1280,1024}},{"matrix",{
         {0.7831809905663851,-0.035313363576290384,-591.5982689569211},

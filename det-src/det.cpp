@@ -8184,7 +8184,15 @@ static void draw_top_face_debug(Mat& image, const json& det_json)
     {
         if (!obj.contains("status") || obj["status"] != "ok")
             continue;
-        if (obj.contains("corners_px") && obj["corners_px"].is_array() &&
+        if (obj.value("shape", std::string()) == "circle" &&
+            obj.contains("center_px") && obj["center_px"].is_array() &&
+            obj["center_px"].size() >= 2 && obj.contains("radius_px"))
+        {
+            cv::Point c(cvRound(obj["center_px"][0].get<double>()),
+                cvRound(obj["center_px"][1].get<double>()));
+            cv::circle(image, c, cvRound(obj["radius_px"].get<double>()), Scalar(0, 255, 0), 2);
+        }
+        else if (obj.contains("corners_px") && obj["corners_px"].is_array() &&
             obj["corners_px"].size() == 4)
         {
             std::vector<cv::Point> pts;
@@ -8206,7 +8214,7 @@ static void draw_top_face_debug(Mat& image, const json& det_json)
             cv::Point c(cvRound(obj["center_px"][0].get<double>()),
                 cvRound(obj["center_px"][1].get<double>()));
             cv::circle(image, c, 5, Scalar(0, 0, 255), -1);
-            if (obj.contains("angle_deg"))
+            if (obj.value("angle_defined", true) && obj.contains("angle_deg"))
             {
                 double ang = obj["angle_deg"].get<double>() * CV_PI / 180.0;
                 cv::Point e(cvRound(c.x + 40 * std::cos(ang)),
@@ -8328,8 +8336,10 @@ int det_to_pts_top_face(Mat& image, const json& det_json, json& j)
         float wx = 0, wy = 0;
         g_depth_info.get_world_xy_by_z(ix, iy, wx, wy, plane_depth);
 
-        // pts_lunzi[3] is the top-face long edge in millimetres (not lunzi radius).
-        // Project both ends along the detected long axis at ref_depth.
+        // pts_lunzi[3] is the top-face span in millimetres: cylinder diameter,
+        // or the long edge for the explicitly selected legacy rectangle path.
+        // Project both span ends at ref_depth; a circle uses its diameter
+        // along the fixed output direction, without inventing a long axis.
         float length_mm = 0;
         if (h.length_px > 0)
         {

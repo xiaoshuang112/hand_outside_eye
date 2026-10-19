@@ -87,6 +87,10 @@ struct Runtime {
     uintmax_t backgroundBytes=0;
     unsigned backgroundGeneration=0;
     bool autoReload=true,alignBackground=false;
+    bool circles=true;
+    double circleMinRadius=18, circleMaxRadius=38, circleThreshold=30;
+    double circleMinIntensity=105, circleTolerance=1.3, circleCoverage=.75, circleFill=.75;
+    double circleFixedAngle=0;
     cv::Mat background,descriptors;
     cv::Mat backgroundFloat,backgroundSmall,backgroundMean,backgroundVariance,backgroundSmooth;
     std::vector<cv::KeyPoint> keys;
@@ -130,7 +134,7 @@ bool loadBackground(Runtime& r,bool force=false) {
     if(background.empty())throw std::runtime_error("cannot read background: "+r.backgroundPath.string());
     if(time!=fs::last_write_time(r.backgroundPath)||bytes!=fs::file_size(r.backgroundPath))throw std::runtime_error("background changed while loading; replace it atomically and retry");
 #ifdef USE_X3_NPU
-    if(background.size()!=cv::Size(1280,1024))throw std::runtime_error("X3 feature model requires 1280x1024 background");
+    if(!r.circles&&background.size()!=cv::Size(1280,1024))throw std::runtime_error("X3 feature model requires 1280x1024 background");
 #endif
     cv::Mat bgFloat,bgSmall,mean,variance;
     background.convertTo(bgFloat,CV_32F);
@@ -600,7 +604,228 @@ FusionSelection selectCandidate(const cv::Mat& gray,const std::vector<FaceCandid
     return selection;
 }
 
-json detect(Runtime& r,const cv::Mat& image,const json& request) {
+// Cylinders have no observable in-plane heading. Fit the top rim, not the
+// centroid/bounding ellipse of a blob that can also contain a bright sidewall.
+struct CircleFit {
+    P center;
+    double radius=0, support=0, coverage=0, rms=0;
+    bool edgeRefined=false;
+};
+
+bool circleThrough(P a,P b,P c,CircleFit& fit) {
+    P u=b-a,v=c-a;
+    const double cross=u.x*v.y-u.y*v.x;
+    if(std::abs(cross)<1e-6)return false;
+    const double uu=u.dot(u)/2,vv=v.dot(v)/2;
+    fit.center=a+P((uu*v.y-vv*u.y)/cross,(u.x*vv-v.x*uu)/cross);
+    fit.radius=cv::norm(fit.center-a);
+    return std::isfinite(fit.radius)&&std::isfinite(fit.center.x)&&std::isfinite(fit.center.y);
+}
+
+bool circleLeastSquares(const std::vector<P>& points,CircleFit& fit) {
+    if(points.size()<6)return false;
+    P origin;
+    for(P p:points)origin+=p;
+    origin*=1./points.size();
+    cv::Mat a(int(points.size()),3,CV_64F),b(int(points.size()),1,CV_64F),solution;
+    for(size_t i=0;i<points.size();++i){
+        P p=points[i]-origin;
+        a.at<double>(int(i),0)=2*p.x;a.at<double>(int(i),1)=2*p.y;
+        a.at<double>(int(i),2)=1;b.at<double>(int(i))=p.dot(p);
+    }
+    if(!cv::solve(a,b,solution,cv::DECOMP_SVD))return false;
+    P relative(solution.at<double>(0),solution.at<double>(1));
+    const double squared=solution.at<double>(2)+relative.dot(relative);
+    if(!(squared>0))return false;
+    fit.center=origin+relative;fit.radius=std::sqrt(squared);
+    return std::isfinite(fit.radius)&&std::isfinite(fit.center.x)&&std::isfinite(fit.center.y);
+}
+
+double circleSupport(const std::vector<P>& points,CircleFit& fit,double tolerance,
+                     std::vector<P>* inliers=nullptr) {
+    std::array<int,24> bins{};int count=0;double squared=0;
+    if(inliers)inliers->clear();
+    for(P p:points){
+        P d=p-fit.center;const double error=std::abs(cv::norm(d)-fit.radius);
+        if(error>tolerance)continue;
+        ++count;squared+=error*error;
+        int bin=int((std::atan2(d.y,d.x)+pi)*24/(2*pi));
+        ++bins[std::max(0,std::min(23,bin))];
+        if(inliers)inliers->push_back(p);
+    }
+    int covered=0,balanced=0;
+    for(int n:bins){covered+=n>0;balanced+=std::min(n,5);}
+    fit.support=points.empty()?0:double(count)/points.size();
+    fit.coverage=covered/24.;fit.rms=count?std::sqrt(squared/count):1e9;
+    return balanced-.001*fit.rms;
+}
+
+bool fitCircleRim(const Runtime& r,const std::vector<cv::Point>& contour,
+                  const cv::Mat& smoothed,CircleFit& best) {
+    if(contour.size()<12)return false;
+    std::vector<P> points;points.reserve(contour.size());
+    for(auto p:contour)points.emplace_back(p);
+    std::mt19937 random(248);
+    std::uniform_int_distribution<size_t> choose(0,points.size()-1);
+    double bestScore=-1;
+    for(int iteration=0;iteration<240;++iteration){
+        size_t a=choose(random),b=choose(random),c=choose(random);
+        if(a==b||a==c||b==c)continue;
+        CircleFit candidate;
+        if(!circleThrough(points[a],points[b],points[c],candidate)||
+           candidate.radius<r.circleMinRadius||candidate.radius>r.circleMaxRadius)continue;
+        double score=circleSupport(points,candidate,r.circleTolerance);
+        if(candidate.coverage<r.circleCoverage||candidate.support<.55)continue;
+        if(score>bestScore){bestScore=score;best=candidate;}
+    }
+    if(bestScore<0)return false;
+    for(int iteration=0;iteration<5;++iteration){
+        std::vector<P> inliers;
+        circleSupport(points,best,r.circleTolerance,&inliers);
+        CircleFit next=best;
+        if(!circleLeastSquares(inliers,next)||next.radius<r.circleMinRadius||
+           next.radius>r.circleMaxRadius)break;
+        circleSupport(points,next,r.circleTolerance);
+        if(next.coverage<r.circleCoverage||next.support<.55)break;
+        best=next;
+    }
+    // Subpixel calipers are restricted to the already supported top rim. A
+    // remote sidewall-to-floor edge cannot drag the grasp center towards it.
+    std::vector<P> edgePoints;
+    for(int i=0;i<120;++i){
+        const double angle=i*(2*pi/120);P direction(std::cos(angle),std::sin(angle));
+        double bestGradient=6,bestOffset=0;bool found=false;
+        for(double offset=-2.5;offset<=2.5;offset+=.25){
+            P p=best.center+direction*(best.radius+offset);
+            double gradient=sample(smoothed,p-direction*.9)-sample(smoothed,p+direction*.9);
+            double score=gradient-.6*std::abs(offset);
+            if(score>bestGradient){bestGradient=score;bestOffset=offset;found=true;}
+        }
+        if(found)edgePoints.push_back(best.center+direction*(best.radius+bestOffset));
+    }
+    if(edgePoints.size()>=80){
+        CircleFit refined=best;
+        for(int iteration=0;iteration<4;++iteration){
+            std::vector<P> inliers;circleSupport(edgePoints,refined,r.circleTolerance,&inliers);
+            if(!circleLeastSquares(inliers,refined))break;
+        }
+        circleSupport(edgePoints,refined,r.circleTolerance);
+        if(refined.coverage>=r.circleCoverage&&refined.support>=.7&&
+           cv::norm(refined.center-best.center)<=1.5&&std::abs(refined.radius-best.radius)<=2&&
+           refined.radius>=r.circleMinRadius&&refined.radius<=r.circleMaxRadius){
+            refined.edgeRefined=true;best=refined;
+        }
+    }
+    return best.coverage>=r.circleCoverage&&best.support>=.55;
+}
+
+json detectCircles(Runtime& r,const cv::Mat& image,const json& request) {
+    const auto started=std::chrono::steady_clock::now();
+    bool updated=false;
+    if(r.autoReload||request.value("reload_background",false))
+        updated=loadBackground(r,request.value("reload_background",false));
+    if(image.type()!=CV_8UC1)throw std::runtime_error("circle input must be 8-bit grayscale or BGR");
+    if(image.size()!=r.background.size())throw std::runtime_error("background/image size mismatch");
+    std::vector<cv::Point2f> roi;
+    if(request.contains("rect")){
+        const auto& a=request.at("rect");
+        if(!a.is_array()||a.size()!=8)throw std::runtime_error("rect must contain eight pixel coordinates");
+        for(int i=0;i<8;i+=2){
+            double x=a[i].get<double>(),y=a[i+1].get<double>();
+            if(!std::isfinite(x)||!std::isfinite(y))throw std::runtime_error("rect coordinates must be finite");
+            roi.emplace_back(float(x),float(y));
+        }
+        if(!cv::isContourConvex(roi)||std::abs(cv::contourArea(roi))<1)
+            throw std::runtime_error("rect must be a convex quadrilateral");
+    }
+    // A robust exposure offset removes global brightness drift without making
+    // dark drawn circles/stains into positive cylinder candidates.
+    std::vector<double> offsets;
+    for(int y=0;y<image.rows;y+=16)for(int x=0;x<image.cols;x+=16)
+        offsets.push_back(double(image.at<uchar>(y,x))-r.background.at<uchar>(y,x));
+    const double bias=median(offsets);
+    cv::Mat normalized;image.convertTo(normalized,CV_32F,1,-bias);
+    cv::Mat difference=normalized-r.backgroundFloat,mask,bright;
+    cv::compare(difference,r.circleThreshold,mask,cv::CMP_GT);
+    cv::compare(normalized,r.circleMinIntensity,bright,cv::CMP_GT);
+    cv::bitwise_and(mask,bright,mask);
+    cv::morphologyEx(mask,mask,cv::MORPH_OPEN,cv::getStructuringElement(cv::MORPH_ELLIPSE,{3,3}));
+    cv::morphologyEx(mask,mask,cv::MORPH_CLOSE,cv::getStructuringElement(cv::MORPH_ELLIPSE,{5,5}));
+    std::vector<std::vector<cv::Point>> contours;
+    cv::findContours(mask,contours,cv::RETR_EXTERNAL,cv::CHAIN_APPROX_NONE);
+    std::sort(contours.begin(),contours.end(),[](const auto& a,const auto& b){
+        return cv::boundingRect(a).x<cv::boundingRect(b).x;
+    });
+    const cv::Mat smoothed=smooth(normalized);
+    json output=json::array(),pts=json::array();int id=0,count=0;
+    for(const auto& contour:contours){
+        const double area=cv::contourArea(contour);
+        if(area<.5*pi*r.circleMinRadius*r.circleMinRadius)continue;
+        const auto box=cv::boundingRect(contour);
+        json rec={{"id",++id},{"shape","circle"},{"status","not_circular"},
+                  {"model","cylinder_top"},{"center_px",nullptr},{"top_center_px",nullptr},
+                  {"angle_deg",r.circleFixedAngle},{"long_edge_angle_deg",r.circleFixedAngle},
+                  {"angle_defined",false},{"angle_source","fixed_rotational_symmetry"},
+                  {"corners_px",nullptr},{"coarse_bbox_xyxy",{box.x,box.y,box.br().x,box.br().y}},
+                  {"center_model_status","disabled"}};
+        if(request.value("include_foreground_contours",false)){
+            rec["foreground_contour_px"]=json::array();
+            for(auto p:contour)rec["foreground_contour_px"].push_back({p.x,p.y});
+        }
+        if(box.x<=1||box.y<=1||box.br().x>=image.cols-1||box.br().y>=image.rows-1){
+            rec["status"]="partial";output.push_back(rec);continue;
+        }
+        if(area>1.6*pi*r.circleMaxRadius*r.circleMaxRadius){
+            rec["status"]="unmodeled_size";output.push_back(rec);continue;
+        }
+        const double perimeter=cv::arcLength(contour,true);
+        const double circularity=perimeter>0?4*pi*area/(perimeter*perimeter):0;
+        rec["circularity"]=circularity;
+        CircleFit fit;
+        if(circularity<.60||!fitCircleRim(r,contour,smoothed,fit)){
+            output.push_back(rec);continue;
+        }
+        int interior=0,foreground=0;
+        const double innerRadius=.65*fit.radius;
+        for(int y=int(std::floor(fit.center.y-innerRadius));y<=int(std::ceil(fit.center.y+innerRadius));++y)
+            for(int x=int(std::floor(fit.center.x-innerRadius));x<=int(std::ceil(fit.center.x+innerRadius));++x){
+                if(x<0||y<0||x>=mask.cols||y>=mask.rows||cv::norm(P(x,y)-fit.center)>innerRadius)continue;
+                ++interior;foreground+=mask.at<uchar>(y,x)>0;
+            }
+        const double fill=interior?double(foreground)/interior:0;
+        rec["interior_fill"]=fill;
+        if(fill<r.circleFill){rec["status"]="not_solid_top";output.push_back(rec);continue;}
+        if(fit.center.x-fit.radius<1||fit.center.y-fit.radius<1||
+           fit.center.x+fit.radius>=image.cols-1||fit.center.y+fit.radius>=image.rows-1){
+            rec["status"]="partial";output.push_back(rec);continue;
+        }
+        if(!roi.empty()&&cv::pointPolygonTest(roi,fit.center,false)<0){
+            rec["status"]="outside_roi";output.push_back(rec);continue;
+        }
+        const double x=fit.center.x,y=fit.center.y,radius=fit.radius;
+        rec["status"]="ok";rec["center_px"]=rec["top_center_px"]=rec["geometric_center_px"]={x,y};
+        rec["center_source"]="circle_fit";rec["radius_px"]=radius;rec["diameter_px"]=2*radius;
+        rec["apparent_length_px"]=rec["apparent_width_px"]=2*radius;
+        // Keep the legacy four-point field as bounds, not physical top corners.
+        rec["corners_px"]={{x-radius,y-radius},{x+radius,y-radius},{x+radius,y+radius},{x-radius,y+radius}};
+        rec["corners_definition"]="circle_bounding_box";
+        rec["fit_support"]=fit.support;rec["fit_coverage"]=fit.coverage;rec["fit_rms_px"]=fit.rms;
+        rec["edge_refined"]=fit.edgeRefined;rec["angle_signed_deg"]=r.circleFixedAngle;
+        output.push_back(rec);pts.push_back({x,y,r.circleFixedAngle});++count;
+    }
+    const double elapsed=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-started).count();
+    return {{"ret-code",0},{"ret-msg","ok"},{"best_img_idx",count?0:-1},
+            {"image_size_wh",{image.cols,image.rows}},{"stage_ms",{{"circle_detection",elapsed}}},
+            {"geometry_ms",json::object()},{"feature_backend","cpu_circle_geometry"},
+            {"background_image",r.backgroundPath.string()},{"background_generation",r.backgroundGeneration},
+            {"background_updated",updated},{"alignment_mode","fixed"},
+            {"coordinate_frame","current_input_image_pixels"},{"center_definition","fitted_circular_top_rim"},
+            {"angle_definition","fixed_for_rotationally_symmetric_cylinder"},
+            {"foreground_object_count",output.size()},{"top_face_count",count},
+            {"objects",output},{"pts_top_face",pts},{"elapsed_ms",elapsed}};
+}
+
+json detectRectangles(Runtime& r,const cv::Mat& image,const json& request) {
     auto started=std::chrono::steady_clock::now();cv::Mat normalized,aligned;
     bool backgroundUpdated=false;
     if(r.autoReload||request.value("reload_background",false))backgroundUpdated=loadBackground(r,request.value("reload_background",false));
@@ -750,6 +975,10 @@ int top_face_init(const std::string& appDir) {
             background = (fs::exists(cfg) ? cfg.parent_path() : r->app / "config" / "top_face") / background;
         r->backgroundPath = fs::absolute(background);
         r->autoReload = config.value("background_auto_reload", true);
+        const auto shape=config.value("workpiece_shape",std::string("circle"));
+        if(shape!="circle"&&shape!="rectangle")
+            throw std::runtime_error("workpiece_shape must be circle or rectangle");
+        r->circles=shape=="circle";
         auto alignment = config.value("alignment_mode", std::string("fixed"));
         if (alignment != "fixed" && alignment != "orb")
             throw std::runtime_error("alignment_mode must be fixed or orb");
@@ -764,6 +993,31 @@ int top_face_init(const std::string& appDir) {
             r->difference <= 0 || r->residual <= 0 || r->correlation <= 0 || r->correlation >= 1)
             throw std::runtime_error("invalid algorithm configuration");
         cv::setNumThreads(threads);
+        if(r->circles){
+            if(r->alignBackground)throw std::runtime_error("circle detection requires fixed alignment");
+            r->circleMinRadius=config.value("circle_min_radius_px",18.);
+            r->circleMaxRadius=config.value("circle_max_radius_px",38.);
+            r->circleThreshold=config.value("circle_difference_threshold",30.);
+            r->circleMinIntensity=config.value("circle_min_intensity",105.);
+            r->circleTolerance=config.value("circle_fit_tolerance_px",1.3);
+            r->circleCoverage=config.value("circle_min_coverage",.75);
+            r->circleFill=config.value("circle_min_fill_ratio",.75);
+            r->circleFixedAngle=config.value("circle_angle_deg",0.);
+            for(double value:{r->circleMinRadius,r->circleMaxRadius,r->circleThreshold,
+                              r->circleMinIntensity,r->circleTolerance,r->circleCoverage,r->circleFill,r->circleFixedAngle})
+                if(!std::isfinite(value))throw std::runtime_error("circle parameters must be finite");
+            if(r->circleMinRadius<3||r->circleMaxRadius<=r->circleMinRadius||
+               r->circleThreshold<=0||r->circleThreshold>=255||
+               r->circleMinIntensity<0||r->circleMinIntensity>=255||
+               r->circleTolerance<=0||r->circleTolerance>5||
+               r->circleCoverage<.6||r->circleCoverage>1||
+               r->circleFill<=0||r->circleFill>1||
+               r->circleFixedAngle<=-90||r->circleFixedAngle>90)
+                throw std::runtime_error("invalid circle detector configuration");
+        }
+        // The former rectangle path is available only by explicit selection.
+        // Circle mode never loads the rectangle center NN or BPU feature model.
+        if(!r->circles){
         if (config.contains("models")) {
             r->models.clear();
             for (const auto& m : config["models"]) {
@@ -800,6 +1054,7 @@ int top_face_init(const std::string& appDir) {
         } catch (const std::exception& e) {
             r->useCenterModel = false;
             r->centerModelError = e.what();
+        }
         }
         auto mappingPath = r->app / "config" / "top_face" / "tcp_xy_mapping.json";
         if (fs::exists(mappingPath)) {
@@ -918,13 +1173,17 @@ int top_face_init(const std::string& appDir) {
             }
         }
         loadBackground(*r, true);
+        if(r->circles&&r->circleMaxRadius>=.5*std::min(r->background.cols,r->background.rows))
+            throw std::runtime_error("circle radius bounds exceed the background image");
         if (r->tcpXYEnabled && r->background.size()!=r->tcpXYImageSize)
             throw std::runtime_error("tcp_xy_mapping.json: background dimensions mismatch");
 #ifdef USE_X3_NPU
+        if(!r->circles){
         if (!r->fast) throw std::runtime_error("X3 BPU requires fast mode");
         if (r->background.size() != cv::Size(1280, 1024))
             throw std::runtime_error("X3 feature model requires 1280x1024 background");
         r->npu.load((cfg.parent_path() / config.value("npu_model", std::string("background_features.bin"))).string());
+        }
 #endif
         reply.clear();
         runtime = std::move(r);
@@ -949,7 +1208,8 @@ int top_face_detect(const cv::Mat& bgrOrGray, const nlohmann::json& request, nlo
             image = bgrOrGray;
         else
             throw std::runtime_error("image must be grayscale or BGR");
-        result = detect(*runtime, image, request);
+        result = runtime->circles ? detectCircles(*runtime,image,request)
+                                  : detectRectangles(*runtime,image,request);
         return result.value("ret-code", 0);
     } catch (const std::exception& e) {
         result = {{"ret-code", -1},
